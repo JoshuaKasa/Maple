@@ -14,7 +14,8 @@ type_dic = {
     "f32": "float",
     "f64": "double",
     "char": "char",
-    "str": "std::string"
+    "str": "std::string",
+    "empty": "void"
 }
 
 class Token:
@@ -48,19 +49,32 @@ class JoshLangLexer:
             ("INTEGER32", r"\bi32\b"), # 32-bit integer keyword
             ("INTEGER64", r"\bi64\b"), # 64-bit integer keyword
             ("BOOLEAN", r"\bbool\b"), # Boolean keyword
+            ("STRING", r"\bstr\b"), # String keyword
+            ("FLOAT32", r"\bf32\b"), # 32-bit float keyword
+            ("FLOAT64", r"\bf64\b"), # 64-bit float keyword
+            ("CHAR", r"\bchar\b"), # Character keyword
+            ("EMPTY", r"\bempty\b"), # No return
+            ("TRUE", r"\btrue\b"), # True keyword
+            ("FALSE", r"\bfalse\b"), # False keyword
             ("OUT", r"\bout\b"), # Output keyword
             ("IF", r"\bif\b"), # If keyword            ("END", r"\bend\b"), # End keyword (end of if statement)
             ("END", r"\bend\b"), # End keyword (end of if statement)
-            ("AROUND", r"\baround\b"), # Around keyword (for loops)
+            ("LOOP", r"\bloop\b"), # Loop keyword (for loops)
             ("ROLL", r"\broll\b"), # Roll keyword (end of for loop)
             ("BACK", r"\bback\b"), # Back keyword (save current variable value)
             ("LOAD", r"\bload\b"), # Load keyword (load saved variable value)
             ("LIB", r"\blib @\w+"), # Library keyword (import libraries)
+            ("ADD", r"\badd\b"), # Add keyword (add to variable)
+            ("SUB", r"\bsub\b"), # Subtract keyword (subtract from variable)
+            ("MUL", r"\bmul\b"), # Multiply keyword (multiply variable)
+            ("DIV", r"\bdiv\b"), # Divide keyword (divide variable)
+            ("MOD", r"\bmod\b"), # Modulo keyword (modulo variable)
             ("FUNC", r"\bfnc\b"), # Function keyword
             ("RETURN", r"\breturn\b"), # Return keyword
             ("GREATER", r">"), # Greater than operator
             ("LESS", r"<"), # Less than operator
             ("ARROW", r"->"), # Array assign operator
+            ("INSIDE", "=>" ), # Inside variable operator
             ("COMMA", r","), # Comma
             ("COLON", r":"), # Colon
             ("DOTDOT", r"\.\."), # Dot dot operator, used for ranges
@@ -70,6 +84,7 @@ class JoshLangLexer:
             ("LEFT_CRLY_BRACKET", r"\{"), # Left curly bracket
             ("RIGHT_CRLY_BRACKET", r"\}"), # Right curly bracket
             ("COMPARISON", r"\b==\b"), # Equal comparison operator
+            ("COMMENT" , r"//.*"), # Comment
 
             # Other
             ("ID", r"[A-Za-z0-9_]+"),  # Identifiers (allowing alphanumeric characters and underscore)
@@ -187,16 +202,16 @@ class ENDnode(ASTnode):
     def __repr__(self):
         return f"ENDnode()"
 
-class AROUNDnode(ASTnode):
+class LOOPnode(ASTnode):
     def __init__(self, variable, times_to_run, start_index=0):
-        super().__init__('AROUND')
+        super().__init__('LOOP')
         self.variable = variable
         self.start_index = start_index
         self.times_to_run = times_to_run # This can also be thend indexx
         self.children = [] # List of nodes inside the for loop
 
     def __repr__(self):
-        return f"AROUNDnode(times_to_run={self.times_to_run})"
+        return f"LOOPnode(times_to_run={self.times_to_run})"
 
 class ROLLnode(ASTnode):
     def __init__(self):
@@ -258,6 +273,25 @@ class RANGEnode(ASTnode):
     def __repr__(self):
         return f"RANGEnode(start={self.start}, end={self.end})"
 
+class EXPRESSIONnode(ASTnode): # If there's no store variable, the value will be stored inside the left variable
+    def __init__(self, left, operator, right, store_variable=None):
+        super().__init__('EXPRESSION')
+        self.left = left
+        self.operator = operator
+        self.right = right
+        self.store_variable = store_variable
+
+    def __repr__(self):
+        return f"EXPRESSIONnode(left={self.left}, operator={self.operator}, right={self.right}, store_variable={self.store_variable})"
+
+class LIBnode(ASTnode):
+    def __init__(self, library_name): # The library name is basically the name of the file (hpp)
+        super().__init__('LIB')
+        self.library_name = library_name
+
+    def __repr__(self):
+        return f"LIBnode(library_name={self.library_name})"
+
 class JoshLangParser:
     def __init__(self, tokens):
         self.tokens = tokens
@@ -296,8 +330,8 @@ class JoshLangParser:
             self.parse_end()
         elif token.type == "SET":
             self.parse_set()
-        elif token.type == "AROUND":
-            self.parse_around()
+        elif token.type == "LOOP":
+            self.parse_loop()
         elif token.type == "ROLL":
             self.parse_roll()
         elif token.type == "BACK":
@@ -310,8 +344,39 @@ class JoshLangParser:
             self.parse_return()
         elif self.is_function_call():
             self.parse_call()
+        elif token.type == "ADD" or token.type == "SUB" or token.type == "MUL" or token.type == "DIV" or token.type == "MOD":
+            self.parse_expression()
+        elif token.type == "LIB":
+            self.parse_lib()
         else:
             self.current_position += 1
+    
+    def parse_lib(self):
+        library_name = self.tokens[self.current_position].value.split("@")[1]
+        
+        # Error checking
+        if not os.path.exists(f"{library_name}.mapl"):
+            raise JoshLangError(f"Library {library_name} does not exist", self.tokens[self.current_position].line_num)
+        if library_name in self.symbol_table:
+            raise JoshLangError(f"Library {library_name} already exists", self.tokens[self.current_position].line_num)
+
+        # Transpiling the library into C++ code
+        with open(f"{library_name}.mapl", "r") as f:
+            code = f.read()
+        tokens = JoshLangLexer(code).tokenize()
+        nodes = JoshLangParser(tokens).parse()
+        cpp_code = JoshLangTranspiler(nodes).transpile()
+
+        # Writing the C++ code to a header file
+        with open(f"{library_name}.hpp", "w") as f:
+            f.write(cpp_code)
+
+        # Adding the library to the symbol table
+        self.symbol_table[library_name] = f"{library_name}.hpp"
+        self.current_position += 1 # Move past library name
+
+        lib_node = LIBnode(library_name) # Create the LIB node
+        self.nodes.append(lib_node) 
 
     def parse_run(self):
         self.current_position += 1
@@ -382,7 +447,32 @@ class JoshLangParser:
                 "array_values": array_values if is_array else None,
                 "array_size": array_size if is_array else 0  # Use array_size instead of variable_value
             }
+    
+    def parse_expression(self):
+        op_map = {
+            "ADD": "+",
+            "SUB": "-",
+            "MUL": "*",
+            "DIV": "/",
+        }
+        
+        operation = self.tokens[self.current_position].type # Get the operation
+        self.current_position += 1 # Move past operation
+        left = self.tokens[self.current_position].value
+        self.current_position += 1
+        right = self.tokens[self.current_position].value
+        self.current_position += 1 # Move past right
 
+        assign_to = None
+        if self.tokens[self.current_position].type == "INSIDE":
+            self.current_position += 1 # Move past 'INSIDE'
+            assign_to = self.tokens[self.current_position].value # Get the variable name
+            if assign_to not in self.symbol_table:
+                raise JoshLangError(f"Variable {assign_to} does not exist", self.tokens[self.current_position].line_num, self.tokens[self.current_position].char_pos)
+            self.current_position += 1 # Move past variable name
+
+        expression_node = EXPRESSIONnode(left, op_map[operation], right, assign_to)
+        self.nodes.append(expression_node)
 
     def parse_set(self):
         self.current_position += 1 # Move past 'SET'
@@ -452,9 +542,9 @@ class JoshLangParser:
         self.nodes.append(set_node) # Add the node to the AST
 
     def parse_out(self):
-        self.current_position += 1
-        variable_name = self.tokens[self.current_position].value
-        self.current_position += 1
+        self.current_position += 1 # Move past 'OUT'
+        variable_name = self.tokens[self.current_position].value # Get the variable name
+        self.current_position += 1 # Move past variable name
         
         # Check for array access
         if self.current_position < len(self.tokens) and self.tokens[self.current_position].type == "LEFT_SQR_BRACKET":
@@ -502,8 +592,8 @@ class JoshLangParser:
         end_node = ENDnode()
         self.nodes.append(end_node)
     
-    def parse_around(self):
-        self.current_position += 1 # Move past "AROUND" token
+    def parse_loop(self):
+        self.current_position += 1 # Move past "LOOP" token
         variable = self.tokens[self.current_position].value # Get the loop variable
         self.current_position += 1 # Move past the loop variable
         
@@ -520,16 +610,16 @@ class JoshLangParser:
             self.current_position += 1 # Move past the ending index
 
         # Parsing everything inside the loop
-        around_node = AROUNDnode(variable, ending_index, starting_index)
+        loop_node = LOOPnode(variable, ending_index, starting_index)
         current_nodes = self.nodes # Temporarily store the current list of nodes
         self.nodes = [] # Create a new list for nodes inside the loop
 
-        while self.current_position < len(self.tokens) and self.tokens[self.current_position].type != "ROLL":
+        while self.current_position < len(self.tokens) and self.tokens[self.current_position].type != "END":
             self.parse_statement()
 
-        around_node.children = self.nodes # Add the parsed nodes to the around_node
+        loop_node.children = self.nodes # Add the parsed nodes to the loop_node
         self.nodes = current_nodes # Restore the original nodes list
-        self.nodes.append(around_node) # Adding the children to the AST
+        self.nodes.append(loop_node) # Adding the children to the AST
 
         # Parsing the ROLL token
         self.parse_roll()
@@ -591,7 +681,10 @@ class JoshLangParser:
         self.nodes.append(function_node) # Add the function_node to the AST
 
         # Parsing the END token
-        self.parse_end()
+        if self.current_position < len(self.tokens) and self.tokens[self.current_position].type == "END":
+            self.current_position += 1
+        else:
+            raise JoshLangError(f"Expected 'END' after function body, got '{self.tokens[self.current_position].value}'", self.tokens[self.current_position].line_num, self.tokens[self.current_position].char_pos)
 
     def parse_return(self):
         self.current_position += 1 # Move past the "RETURN" token
@@ -624,6 +717,11 @@ class JoshLangTranspiler:
 
         # Write includes and start of main function
         self.cpp_code += "#include <iostream>\n#include <string>\n#include <vector>\n#include <fstream>\n#include <sstream>\n#include <algorithm>\n#include <random>\n#include <chrono>\n#include <map>\n#include <cstdint>\n\n"
+
+        # BUT FIRST... let's transpile the function from the imported libraries
+        for node in self.ast:
+            if node.type == "LIB":
+                self.transpile_node(node)
         
         # We will then transpile the function definitions (we need the types)
         for node in self.ast:
@@ -635,9 +733,12 @@ class JoshLangTranspiler:
 
         # Then transpile the rest of the nodes
         for node in self.ast:
-            if node.type != "FUNC":
+            if node.type != "FUNC" and node.type != "LIB":
+                print(node.type)
                 self.transpile_node(node)
-
+        
+        if self.ast[0].type == "RUN":
+            self.cpp_code += "}\n" # End of run function
         self.cpp_code += "\nstd::cin.get();\nreturn 0;\n}"
         return self.cpp_code
 
@@ -654,8 +755,8 @@ class JoshLangTranspiler:
             self.transpile_ENDnode(node)
         elif node.type == "SET":
             self.transpile_SETnode(node)
-        elif node.type == "AROUND":
-            self.transpile_AROUNDnode(node)
+        elif node.type == "LOOP":
+            self.transpile_LOOPnode(node)
         elif node.type == "ROLL":
             self.transpile_ROLLnode(node)
         elif node.type == "BACK":
@@ -668,6 +769,10 @@ class JoshLangTranspiler:
             self.transpile_RETURNnode(node)
         elif node.type == "CALL":
             self.transpile_CALLnode(node)
+        elif node.type == "EXPRESSION":
+            self.transpile_EXPRESSIONnode(node)
+        elif node.type == "LIB":
+            self.transpile_LIBnode(node)
         else:
             raise Exception(f"Invalid node type: {node.type}")
 
@@ -714,7 +819,7 @@ class JoshLangTranspiler:
     def transpile_ENDnode(self, node):
         self.cpp_code += "}\n"
 
-    def transpile_AROUNDnode(self, node):
+    def transpile_LOOPnode(self, node):
         self.cpp_code += f"for (int {node.variable} = {node.start_index}; {node.variable} < {node.times_to_run}; {node.variable}++) {{\n" 
         for child in node.children:
             self.transpile_node(child)
@@ -759,6 +864,17 @@ class JoshLangTranspiler:
         for argument in node.args:
             self.cpp_code += f"{argument}, "
         self.cpp_code = self.cpp_code[:-2] + ");\n" # Remove the last comma and space and add the closing bracket
+    
+    def transpile_EXPRESSIONnode(self, node):
+        print(node)
+        if node.store_variable is not None:
+            self.cpp_code += f"{node.store_variable} = {node.left} {node.operator} {node.right};\n"
+        else:
+            self.cpp_code += f"{node.left} {node.operator}= {node.right};\n"
+    
+    def transpile_LIBnode(self, node):
+        self.cpp_code += f"#include \"{node.library_name}.hpp\"\n"
+
 
 def compile(file) -> None:
     with open(file, "r") as file:
@@ -772,11 +888,11 @@ def compile(file) -> None:
     transpiler = JoshLangTranspiler(ast)
     cpp_code = transpiler.transpile() 
     
-    with open(r"C:\Users\jizos\Documents\Programming\Python\JoshLang\JoshLang.cpp", "w") as file_cpp:
+    with open(r"C:\Users\jizos\Documents\Programming\Python\Maple\JoshLang.cpp", "w") as file_cpp:
         file_cpp.write(cpp_code)
 
     os.system("g++ JoshLang.cpp -o JoshLang.exe")
     os.system("JoshLang.exe")
 
 if __name__ == "__main__":
-    compile(r"C:\Users\jizos\Documents\Programming\Python\JoshLang\Test.josh")
+    compile(r"C:\Users\jizos\Documents\Programming\Python\Maple\Test.josh")

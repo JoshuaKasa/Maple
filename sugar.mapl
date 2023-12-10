@@ -1,0 +1,3 @@
+fnc i16 sugar : i32 n :
+    out n
+end

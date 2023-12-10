@@ -1,16 +1,16 @@
-run 1
+lib @sugar
 
-fnc i32 fibonacci : i32 n :
-	dec i32 a 0
-	dec i32 b 1
-	dec i32 c 0
+fnc empty fibonacci : i32 n :
+    dec ch i32 a 0
+    dec ch i32 b 1
+    dec ch i32 c 0
 
-	around i 1 .. n
-		set c b
-		set b (a + b)
-		set a c
-		out a
-	roll
+    loop i 1 .. n
+        add a b => c // Hello world!
+        set a b
+        set b c
+        out c
+    end
 end
 
 fibonacci : 10 :
