@@ -1,4 +1,4 @@
-lib @math
+lib @sugar
 
 run 5
 

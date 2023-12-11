@@ -1,126 +1,9 @@
-import re
+from MapleError import MapleError
+from MapleLexer import MapleLexer
+from MapleTranspiler import MapleTranspiler
+from MapleTypes import *
+
 import os
-import sys
-import subprocess
-from JLangError import JoshLangError
-
-variable_types = ["i8", "i16", "i32", "i64", "bool", "str", "f32", "f64"]
-type_dic = {
-    "i8": "int8_t",
-    "i16": "int16_t",
-    "i32": "int32_t",
-    "i64": "int64_t",
-    "bool": "bool",
-    "f32": "float",
-    "f64": "double",
-    "char": "char",
-    "str": "std::string",
-    "empty": "void"
-}
-
-class Token:
-    def __init__(self, type_, value, line_num, char_pos):
-        self.type = type_
-        self.value = value
-        self.line_num = line_num
-        self.char_pos = char_pos
-
-    def __repr__(self):
-        return f"Token({repr(self.type)}, {repr(self.value)}, {repr(self.line_num)}, {repr(self.char_pos)})"
-
-class JoshLangLexer:
-    def __init__(self, source_code):
-        self.source_code = source_code
-        self.tokens = []
-        self.current_position = 0
-
-    def tokenize(self):
-        # Regex for tokens
-        token_specification = [
-            ("NUMBER", r"\d+(\.\d*)?"), # Integer or decimal numbers
-
-            # Keywords, the \b means that the keyword must be its own word and not substrings
-            ("RUN", r"\brun\b"), # Run keyword
-            ("DEC", r"\bdec\b"), # Declare keyword
-            ("SET", r"\bset\b"), # Set keyword
-            ("CH", r"\bch\b"), # Not constant keyword
-            ("INTEGER8", r"\bi8\b"), # 8-bit integer keyword
-            ("INTEGER16", r"\bi16\b"), # 16-bit integer keyword
-            ("INTEGER32", r"\bi32\b"), # 32-bit integer keyword
-            ("INTEGER64", r"\bi64\b"), # 64-bit integer keyword
-            ("BOOLEAN", r"\bbool\b"), # Boolean keyword
-            ("STRING", r"\bstr\b"), # String keyword
-            ("FLOAT32", r"\bf32\b"), # 32-bit float keyword
-            ("FLOAT64", r"\bf64\b"), # 64-bit float keyword
-            ("CHAR", r"\bchar\b"), # Character keyword
-            ("EMPTY", r"\bempty\b"), # No return
-            ("TRUE", r"\btrue\b"), # True keyword
-            ("FALSE", r"\bfalse\b"), # False keyword
-            ("OUT", r"\bout\b"), # Output keyword
-            ("IF", r"\bif\b"), # If keyword            ("END", r"\bend\b"), # End keyword (end of if statement)
-            ("END", r"\bend\b"), # End keyword (end of if statement)
-            ("LOOP", r"\bloop\b"), # Loop keyword (for loops)
-            ("ROLL", r"\broll\b"), # Roll keyword (end of for loop)
-            ("BACK", r"\bback\b"), # Back keyword (save current variable value)
-            ("LOAD", r"\bload\b"), # Load keyword (load saved variable value)
-            ("LIB", r"\blib @\w+"), # Library keyword (import libraries)
-            ("ADD", r"\badd\b"), # Add keyword (add to variable)
-            ("SUB", r"\bsub\b"), # Subtract keyword (subtract from variable)
-            ("MUL", r"\bmul\b"), # Multiply keyword (multiply variable)
-            ("DIV", r"\bdiv\b"), # Divide keyword (divide variable)
-            ("MOD", r"\bmod\b"), # Modulo keyword (modulo variable)
-            ("FUNC", r"\bfnc\b"), # Function keyword
-            ("RETURN", r"\breturn\b"), # Return keyword
-            ("GREATER", r">"), # Greater than operator
-            ("LESS", r"<"), # Less than operator
-            ("ARROW", r"->"), # Array assign operator
-            ("INSIDE", "=>" ), # Inside variable operator
-            ("COMMA", r","), # Comma
-            ("COLON", r":"), # Colon
-            ("DOTDOT", r"\.\."), # Dot dot operator, used for ranges
-            ("LEFT_PAREN", r"\("), # Left parenthesis
-            ("LEFT_SQR_BRACKET", r"\["), # Left square bracket
-            ("RIGHT_SQR_BRACKET", r"\]"), # Right square bracket
-            ("LEFT_CRLY_BRACKET", r"\{"), # Left curly bracket
-            ("RIGHT_CRLY_BRACKET", r"\}"), # Right curly bracket
-            ("COMPARISON", r"\b==\b"), # Equal comparison operator
-            ("COMMENT" , r"//.*"), # Comment
-
-            # Other
-            ("ID", r"[A-Za-z0-9_]+"),  # Identifiers (allowing alphanumeric characters and underscore)
-            ("OP", r"[+\-*/]"), # Arithmetic operators
-            ("NEWLINE", r"\n"), # Line endings
-            ("SKIP", r"[ \t]+"), # Skip over spaces and tabs
-        ]
-
-        # Compile regex
-        tok_regex = "|".join("(?P<%s>%s)" % pair for pair in token_specification)
-        get_token = re.compile(tok_regex).match # Match regex to source code
-
-        # Tokenize
-        line_num = 1
-        line_start = 0
-
-        while self.current_position < len(self.source_code):
-            match = get_token(self.source_code, self.current_position)
-            if match is not None: # If the token is valid
-                type_ = match.lastgroup
-                char_pos = match.start() - line_start
-
-                if type_ == "NEWLINE":
-                    line_start = self.current_position
-                    line_num += 1
-                elif type_ != "SKIP":
-                    value = match.group(type_) # Get the value of the token
-                    if type_ == "NUMBER":
-                        val = float(value) if "." in value else int(value)
-                    self.tokens.append(Token(type_, value, line_num, char_pos)) # Appending the token
-                self.current_position = match.end()
-            else:
-                sys.stderr.write("Illegal character: %s\\n" % self.source_code[self.current_position])
-                sys.exit(1)
-
-        return self.tokens
 
 # The parser will be used to transpile the JoshLang code into C++ code
 class ASTnode:
@@ -292,7 +175,7 @@ class LIBnode(ASTnode):
     def __repr__(self):
         return f"LIBnode(library_name={self.library_name})"
 
-class JoshLangParser:
+class MapleParser:
     def __init__(self, tokens):
         self.tokens = tokens
         self.current_position = 0
@@ -355,17 +238,20 @@ class JoshLangParser:
         library_name = self.tokens[self.current_position].value.split("@")[1]
         
         # Error checking
-        if not os.path.exists(f"{library_name}.mapl"):
-            raise JoshLangError(f"Library {library_name} does not exist", self.tokens[self.current_position].line_num)
+        library_path = f"lib/{library_name}.mal"
+        absolute_library_path = os.path.abspath(library_path)
+
+        if not os.path.exists(absolute_library_path):
+                raise MapleError(f"Library {library_name} does not exist", self.tokens[self.current_position].line_num)
         if library_name in self.symbol_table:
-            raise JoshLangError(f"Library {library_name} already exists", self.tokens[self.current_position].line_num)
+            raise MapleError(f"Library {library_name} already exists", self.tokens[self.current_position].line_num)
 
         # Transpiling the library into C++ code
-        with open(f"{library_name}.mapl", "r") as f:
+        with open(absolute_library_path, "r") as f:
             code = f.read()
-        tokens = JoshLangLexer(code).tokenize()
-        nodes = JoshLangParser(tokens).parse()
-        cpp_code = JoshLangTranspiler(nodes).transpile()
+        tokens = MapleLexer(code).tokenize()
+        nodes = MapleParser(tokens).parse()
+        cpp_code = MapleTranspiler(nodes).transpile()
 
         # Writing the C++ code to a header file
         with open(f"{library_name}.hpp", "w") as f:
@@ -412,9 +298,9 @@ class JoshLangParser:
 
             # Error handling
             if variable_name in self.symbol_table:  # Variable already exists
-                raise JoshLangError(f"Variable {variable_name} already exists", self.tokens[self.current_position].line_num, self.tokens[self.current_position].char_pos)
+                raise MapleError(f"Variable {variable_name} already exists", self.tokens[self.current_position].line_num, self.tokens[self.current_position].char_pos)
             elif variable_type not in variable_types:  # Invalid variable type 
-                raise JoshLangError(f"Invalid variable type {variable_type}", self.tokens[self.current_position].line_num, self.tokens[self.current_position].char_pos)
+                raise MapleError(f"Invalid variable type {variable_type}", self.tokens[self.current_position].line_num, self.tokens[self.current_position].char_pos)
 
             # Check for array declaration
             is_array = False
@@ -468,7 +354,7 @@ class JoshLangParser:
             self.current_position += 1 # Move past 'INSIDE'
             assign_to = self.tokens[self.current_position].value # Get the variable name
             if assign_to not in self.symbol_table:
-                raise JoshLangError(f"Variable {assign_to} does not exist", self.tokens[self.current_position].line_num, self.tokens[self.current_position].char_pos)
+                raise MapleError(f"Variable {assign_to} does not exist", self.tokens[self.current_position].line_num, self.tokens[self.current_position].char_pos)
             self.current_position += 1 # Move past variable name
 
         expression_node = EXPRESSIONnode(left, op_map[operation], right, assign_to)
@@ -489,7 +375,7 @@ class JoshLangParser:
 
             # Error handling
             if int(target_index) > int(self.symbol_table[target]["array_size"]) - 1:
-                raise JoshLangError(f"Index {target_index} out of range for array {target}", self.tokens[self.current_position].line_num, self.tokens[self.current_position].char_pos)
+                raise MapleError(f"Index {target_index} out of range for array {target}", self.tokens[self.current_position].line_num, self.tokens[self.current_position].char_pos)
 
             self.current_position += 1 # Move past index
             self.current_position += 1 # Move past ']'
@@ -504,7 +390,7 @@ class JoshLangParser:
                 try:
                     value = self.symbol_table[value]["array_values"][int(value_index)] # Get the value from the array
                 except IndexError:
-                    raise JoshLangError(f"Index {value_index} out of range for array {value}", self.tokens[self.current_position].line_num, self.tokens[self.current_position].char_pos)
+                    raise MapleError(f"Index {value_index} out of range for array {value}", self.tokens[self.current_position].line_num, self.tokens[self.current_position].char_pos)
             else: # Value is a variable
                 value = self.symbol_table[value]["array_values"][int(value)]
         else: # Target is a variable
@@ -515,12 +401,12 @@ class JoshLangParser:
         if target not in self.symbol_table: # Check if variable is declared
             line_num = self.tokens[self.current_position].line_num
             current_char = self.tokens[self.current_position].char_pos
-            raise JoshLangError(f"Variable '{target}' not declared", line_num, current_char)
+            raise MapleError(f"Variable '{target}' not declared", line_num, current_char)
 
         if self.symbol_table[target]["is_constant"]: # Check if variable is constant
             line_num = self.tokens[self.current_position].line_num
             current_char = self.tokens[self.current_position].char_pos
-            raise JoshLangError(f"Cannot set constant variable '{target}' (remember variables are constant by default)", line_num, current_char)
+            raise MapleError(f"Cannot set constant variable '{target}' (remember variables are constant by default)", line_num, current_char)
 
         if self.symbol_table[target]["type"]:
             # Checking if the value is a variable
@@ -529,13 +415,13 @@ class JoshLangParser:
                 if self.symbol_table[target]["type"] != self.symbol_table[value]["type"]:
                     line_num = self.tokens[self.current_position].line_num
                     current_char = self.tokens[self.current_position].char_pos
-                    raise JoshLangError(f"Cannot set variable '{target}' of type '{self.symbol_table[target]['type']}' to variable '{value}' of type '{self.symbol_table[value]['type']}'", line_num, current_char)
+                    raise MapleError(f"Cannot set variable '{target}' of type '{self.symbol_table[target]['type']}' to variable '{value}' of type '{self.symbol_table[value]['type']}'", line_num, current_char)
             else:
                 # Checking if the value is a number
                 if not value.isnumeric():
                     line_num = self.tokens[self.current_position].line_num
                     current_char = self.tokens[self.current_position].char_pos
-                    raise JoshLangError(f"Cannot set variable '{target}' of type '{self.symbol_table[target]['type']}' to '{value}' of type 'NUMBER'", line_num, current_char)
+                    raise MapleError(f"Cannot set variable '{target}' of type '{self.symbol_table[target]['type']}' to '{value}' of type 'NUMBER'", line_num, current_char)
 
 
         set_node = SETnode(target, value, target_is_array, target_index)
@@ -655,7 +541,7 @@ class JoshLangParser:
         if self.tokens[self.current_position].type == "COLON": # Check for the ':' token
             self.current_position += 1 # Move past the ':' token
         else:
-            raise JoshLangError(f"Expected ':' after function name, got '{self.tokens[self.current_position].value}'", self.tokens[self.current_position].line_num, self.tokens[self.current_position].char_pos)
+            raise MapleError(f"Expected ':' after function name, got '{self.tokens[self.current_position].value}'", self.tokens[self.current_position].line_num, self.tokens[self.current_position].char_pos)
 
         # Parsing the arguments
         arguments = {}
@@ -684,7 +570,7 @@ class JoshLangParser:
         if self.current_position < len(self.tokens) and self.tokens[self.current_position].type == "END":
             self.current_position += 1
         else:
-            raise JoshLangError(f"Expected 'END' after function body, got '{self.tokens[self.current_position].value}'", self.tokens[self.current_position].line_num, self.tokens[self.current_position].char_pos)
+            raise MapleError(f"Expected 'END' after function body, got '{self.tokens[self.current_position].value}'", self.tokens[self.current_position].line_num, self.tokens[self.current_position].char_pos)
 
     def parse_return(self):
         self.current_position += 1 # Move past the "RETURN" token
@@ -707,192 +593,3 @@ class JoshLangParser:
 
         call_node = CALLnode(function_name, arguments)
         return call_node
-        
-class JoshLangTranspiler:
-    def __init__(self, ast):
-        self.ast = ast
-        self.cpp_code = ""
-
-    def transpile(self):
-
-        # Write includes and start of main function
-        self.cpp_code += "#include <iostream>\n#include <string>\n#include <vector>\n#include <fstream>\n#include <sstream>\n#include <algorithm>\n#include <random>\n#include <chrono>\n#include <map>\n#include <cstdint>\n\n"
-
-        # BUT FIRST... let's transpile the function from the imported libraries
-        for node in self.ast:
-            if node.type == "LIB":
-                self.transpile_node(node)
-        
-        # We will then transpile the function definitions (we need the types)
-        for node in self.ast:
-            if node.type == "FUNC":
-                self.transpile_node(node)
-
-        self.cpp_code += "int main() {\n"
-        self.cpp_code += "std::map<std::string, int8_t> backups;\n"
-
-        # Then transpile the rest of the nodes
-        for node in self.ast:
-            if node.type != "FUNC" and node.type != "LIB":
-                print(node.type)
-                self.transpile_node(node)
-        
-        if self.ast[0].type == "RUN":
-            self.cpp_code += "}\n" # End of run function
-        self.cpp_code += "\nstd::cin.get();\nreturn 0;\n}"
-        return self.cpp_code
-
-    def transpile_node(self, node):
-        if node.type == "RUN":
-            self.transpile_RUNnode(node)
-        elif node.type == "DEC":
-            self.transpile_DECnode(node)
-        elif node.type == "OUT":
-            self.transpile_OUTnode(node)
-        elif node.type == "IF":
-            self.transpile_IFnode(node)
-        elif node.type == "END":
-            self.transpile_ENDnode(node)
-        elif node.type == "SET":
-            self.transpile_SETnode(node)
-        elif node.type == "LOOP":
-            self.transpile_LOOPnode(node)
-        elif node.type == "ROLL":
-            self.transpile_ROLLnode(node)
-        elif node.type == "BACK":
-            self.transpile_BACKnode(node)
-        elif node.type == "LOAD":
-            self.transpile_LOADnode(node)
-        elif node.type == "FUNC":
-            self.transpile_FNCnode(node)
-        elif node.type == "RETURN":
-            self.transpile_RETURNnode(node)
-        elif node.type == "CALL":
-            self.transpile_CALLnode(node)
-        elif node.type == "EXPRESSION":
-            self.transpile_EXPRESSIONnode(node)
-        elif node.type == "LIB":
-            self.transpile_LIBnode(node)
-        else:
-            raise Exception(f"Invalid node type: {node.type}")
-
-    def transpile_RUNnode(self, node):
-        self.cpp_code += f"for (int run = 0; run < {node.times_to_run}; run++) {{\n"
-
-    def transpile_DECnode(self, node):
-        print(node)
-        cpp_type = type_dic[node.variable_type]
-        const_str = "const " if node.is_constant else ""
-        array_str = f"[{node.variable_value}]" if node.is_array else ""
-        
-        # Check if variable_value is a CALLnode and handle accordingly
-        if isinstance(node.variable_value, CALLnode):
-            call_node = node.variable_value
-            args_str = ', '.join(call_node.args)
-            value_str = f" = {call_node.function_name}({args_str})"
-        else:
-            value_str = f" = {node.variable_value}" if not node.is_array else ""
-        
-        if node.is_array and node.array_values is not None:
-            value_str = " = {" + ", ".join(node.array_values) + "}"
-        
-        self.cpp_code += f"{const_str}{cpp_type} {node.variable_name}{array_str}{value_str};\n"
-
-    
-    def transpile_SETnode(self, node):
-        if node.target_is_array:
-            self.cpp_code += f"{node.target}[{node.target_array_index}] = {node.value};\n"
-        else:
-            self.cpp_code += f"{node.target} = {node.value};\n"
-
-    def transpile_OUTnode(self, node):
-        if node.is_array:
-            self.cpp_code += f"std::cout << {node.variable_name}[{node.array_index}] << std::endl;\n"
-        else:
-            self.cpp_code += f"std::cout << {node.variable_name} << std::endl;\n"
-
-    def transpile_IFnode(self, node):
-        self.cpp_code += f"if ({node.condition.left} {node.condition.operator} {node.condition.right}) {{\n"
-        for child in node.children:
-            self.transpile_node(child)
-
-    def transpile_ENDnode(self, node):
-        self.cpp_code += "}\n"
-
-    def transpile_LOOPnode(self, node):
-        self.cpp_code += f"for (int {node.variable} = {node.start_index}; {node.variable} < {node.times_to_run}; {node.variable}++) {{\n" 
-        for child in node.children:
-            self.transpile_node(child)
-
-    def transpile_ROLLnode(self, node):
-        self.cpp_code += "}\n"
-
-    def transpile_BACKnode(self, node):
-        # Backing up the state of the variable
-        self.cpp_code += f"backups[\"{node.variable_name}\"] = {node.variable_name};\n"
-    
-    def transpile_LOADnode(self, node):
-        # Restoring the state of the variable
-        self.cpp_code += f"{node.variable_name} = backups[\"{node.variable_name}\"];\n"
-
-    def transpile_FNCnode(self, node):
-        function_type = node.function_type 
-        function_name = node.function_name
-        arguments = node.args
-        function_body = node.body
-        
-        # Creating the function header
-        function_type = type_dic[function_type] # Converting the type to C++ type    
-        self.cpp_code += f"{function_type} {function_name}("
-        for argument_name, argument_type in arguments.items():
-            argument_type = type_dic[argument_type] # Converting the type to C++ type
-            self.cpp_code += f"{argument_type} {argument_name}, "
-        self.cpp_code = self.cpp_code[:-2] + ") {\n" # Remove the last comma and space and add the closing bracket
-
-        # Adding the function body
-        for child in function_body:
-            self.transpile_node(child)
-
-        # Adding the closing bracket
-        self.cpp_code += "}\n"
-
-    def transpile_RETURNnode(self, node):
-        self.cpp_code += f"return {node.value};\n"
-
-    def transpile_CALLnode(self, node):
-        self.cpp_code += f"{node.function_name}("
-        for argument in node.args:
-            self.cpp_code += f"{argument}, "
-        self.cpp_code = self.cpp_code[:-2] + ");\n" # Remove the last comma and space and add the closing bracket
-    
-    def transpile_EXPRESSIONnode(self, node):
-        print(node)
-        if node.store_variable is not None:
-            self.cpp_code += f"{node.store_variable} = {node.left} {node.operator} {node.right};\n"
-        else:
-            self.cpp_code += f"{node.left} {node.operator}= {node.right};\n"
-    
-    def transpile_LIBnode(self, node):
-        self.cpp_code += f"#include \"{node.library_name}.hpp\"\n"
-
-
-def compile(file) -> None:
-    with open(file, "r") as file:
-        source_code = file.read()
-        
-    lexer = JoshLangLexer(source_code)
-    tokens = lexer.tokenize()
-    print(tokens)
-    parser = JoshLangParser(tokens)
-    ast = parser.parse() # Abstract Syntax Tree
-    transpiler = JoshLangTranspiler(ast)
-    cpp_code = transpiler.transpile() 
-    
-    with open(r"C:\Users\jizos\Documents\Programming\Python\Maple\JoshLang.cpp", "w") as file_cpp:
-        file_cpp.write(cpp_code)
-
-    os.system("g++ JoshLang.cpp -o JoshLang.exe")
-    os.system("JoshLang.exe")
-
-if __name__ == "__main__":
-    compile(r"C:\Users\jizos\Documents\Programming\Python\Maple\Test.josh")

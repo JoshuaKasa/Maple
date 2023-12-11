@@ -1,4 +1,4 @@
-class JoshLangError(Exception):
+class MapleError(Exception):
     def __init__(self, message, line_num=None, char_pos=None):
         super().__init__(message)  # Call to base Exception class, useful for built-in exception handling
         self.message = message
