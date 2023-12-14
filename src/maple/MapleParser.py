@@ -168,12 +168,21 @@ class EXPRESSIONnode(ASTnode): # If there's no store variable, the value will be
         return f"EXPRESSIONnode(left={self.left}, operator={self.operator}, right={self.right}, store_variable={self.store_variable})"
 
 class LIBnode(ASTnode):
-    def __init__(self, library_name): # The library name is basically the name of the file (hpp)
+    def __init__(self, library_name, main_function="main"): # The library name is basically the name of the file (hpp)
         super().__init__('LIB')
         self.library_name = library_name
+        self.main_function = main_function
 
     def __repr__(self):
         return f"LIBnode(library_name={self.library_name})"
+
+class INITnode(ASTnode):
+    def __init__(self, namespace_name):
+        super().__init__('INIT')
+        self.namespace_name = namespace_name
+
+    def __repr__(self):
+        return f"INITnode(namespace_name={self.namespace_name})"
 
 class MapleParser:
     def __init__(self, tokens):
@@ -231,9 +240,20 @@ class MapleParser:
             self.parse_expression()
         elif token.type == "LIB":
             self.parse_lib()
+        elif token.type == "INIT":
+            self.parse_init()
         else:
             self.current_position += 1
     
+    def parse_init(self):
+        if self.current_position != 0: # Error checking
+            raise MapleError("INIT must be at the beginning of the file", self.tokens[self.current_position].line_num)
+        elif self.current_position + 1 >= len(self.tokens):
+            raise MapleError("Expected namespace name", self.tokens[self.current_position].line_num) # Error checking
+        namespace_name = self.tokens[self.current_position].value.split("@")[1]
+        self.nodes.append(INITnode(namespace_name))
+        self.current_position += 1 # Skipping the namespace name
+
     def parse_lib(self):
         library_name = self.tokens[self.current_position].value.split("@")[1]
         

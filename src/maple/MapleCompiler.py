@@ -6,6 +6,7 @@ from MapleParser import MapleParser
 from MapleTranspiler import MapleTranspiler
 from MapleError import MapleError
 
+# :!python src\maple\MapleCompiler.py src\files\mpl\Test.mpl
 def MapleCompile(file) -> None:
     with open(file, "r") as file:
         source_code = file.read()
@@ -36,7 +37,7 @@ def MapleCompile(file) -> None:
 
     # Compiles the file
     os.system(f"g++ {file_path} -o {file_name}.exe")
-    os.system(f"{file_path}/{file_name}.exe")
+    os.system(f"{file_name}.exe")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compiles Maple code")

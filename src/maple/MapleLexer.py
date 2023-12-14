@@ -48,6 +48,8 @@ class MapleLexer:
             ("BACK", r"\bback\b"), # Back keyword (save current variable value)
             ("LOAD", r"\bload\b"), # Load keyword (load saved variable value)
             ("LIB", r"\blib @\w+"), # Library keyword (import libraries)
+            ("LIBACCESS", r"@(\w+)::"), # Library access keyword (access library namespace)
+            ("INIT", r"\binit @\w+"), # Init keyword (initialize library namespace)
             ("ADD", r"\badd\b"), # Add keyword (add to variable)
             ("SUB", r"\bsub\b"), # Subtract keyword (subtract from variable)
             ("MUL", r"\bmul\b"), # Multiply keyword (multiply variable)
