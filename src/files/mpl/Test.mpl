@@ -1,4 +1,5 @@
 init @fibonacci
+lib @sugar
 
 fnc empty fibonacci : i32 n :
     dec ch i32 a 0

@@ -184,6 +184,16 @@ class INITnode(ASTnode):
     def __repr__(self):
         return f"INITnode(namespace_name={self.namespace_name})"
 
+class LIBACCESSnode(ASTnode):
+    def __init__(self, library_name, function_name, args: list):
+        super().__init__('LIBACCESS')
+        self.library_name = library_name
+        self.function_name = function_name
+        self.args = args
+
+    def __repr__(self):
+        return f"LIBACCESSnode(library_name={self.library_name}, function_name={self.function_name}, args={self.args})"
+
 class MapleParser:
     def __init__(self, tokens):
         self.tokens = tokens
@@ -242,9 +252,22 @@ class MapleParser:
             self.parse_lib()
         elif token.type == "INIT":
             self.parse_init()
+        elif token.type == "LIBACCESS":
+            self.parse_libaccess()
         else:
             self.current_position += 1
-    
+   
+    def parse_libaccess(self):
+        # Formatting is: @library_name::function_name : arg1, arg2 ... argn : (r"@(\w+)::")
+        library_name = self.tokens[self.current_position].value.split("@")[1].split("::")[0]
+        
+        # Parsing function call
+        self.parse_call() # This will append the call node to self.nodes
+
+        access_node = LIBACCESSnode(library_name, self.nodes[-1].function_name, self.nodes[-1].args)
+        self.nodes.pop() # Removing the call node
+        self.nodes.append(access_node)
+       
     def parse_init(self):
         if self.current_position != 0: # Error checking
             raise MapleError("INIT must be at the beginning of the file", self.tokens[self.current_position].line_num)

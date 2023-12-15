@@ -9,6 +9,7 @@
 #include <map>
 #include <cstdint>
 
+#include "../../../lib/sugar.hpp"
 namespace fibonacci {
 void fibonacci(int32_t n) {
 int32_t a = 0;
