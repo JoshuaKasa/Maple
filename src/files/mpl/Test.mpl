@@ -14,4 +14,4 @@ fnc empty fibonacci : i32 n :
     end
 end
 
-fibonacci : 10 :
+fibonacci : 11 :

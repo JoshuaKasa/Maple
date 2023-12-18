@@ -299,6 +299,7 @@ class MapleParser:
         # Writing the C++ code to a header file
         with open(f"{library_name}.hpp", "w") as f:
             f.write(cpp_code)
+            print(f"Absolute path: {os.path.abspath(f.name)}")
 
         # Adding the library to the symbol table
         self.symbol_table[library_name] = f"{library_name}.hpp"

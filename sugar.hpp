@@ -16,6 +16,9 @@ std::cout << n << std::endl;
 int16_t hello(int32_t n) {
 std::cout << n << std::endl;
 }
+void test(int32_t n) {
+std::cout << 1 << std::endl;
+}
 }
 int main() {
 std::map<std::string, int8_t> backups;

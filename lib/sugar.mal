@@ -7,3 +7,7 @@ end
 fnc i16 hello : i32 n :
     out n
 end
+
+fnc empty test : i32 n :
+    out 1
+end
