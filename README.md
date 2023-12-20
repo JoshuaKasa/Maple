@@ -158,7 +158,7 @@ hello : :
 First of all, let's give a bit of context. The "fnc" keyword is used to declare a function, followed by the return [type](#Types) of the function (if it doesn't return anything, you can use the "empty" keyword), the name of the function, the arguments (if any) and the return type (if any), remember that the space between the arguments and the 2 colons is required:
 ```maple
 fnc i64 pow : i64 a, i64 b : // This function takes 2 i64 arguments and returns an i64
-    dec i64 result 1
+    dec ch i64 result 1
     
     loop i 1 .. b
         mul result result

@@ -25,7 +25,13 @@ std::cout << c << std::endl;
 }
 int main() {
 std::map<std::string, int8_t> backups;
-fibonacci::fibonacci(11);
+sugar::evnodd(11);
+if (1 == 1) {
+std::cout << 1 << std::endl;
+}
+else {
+std::cout << 0 << std::endl;
+}
 
 std::cin.get();
 return 0;

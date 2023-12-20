@@ -1,13 +1,35 @@
 init @sugar
 
-fnc i16 sugar : i32 n :
-    out n
+fnc i64 pow : i64 base, i64 power :
+   dec ch i64 result 1
+
+   loop i 0 .. power
+       mul result base
+   end
+   out result
 end
 
-fnc i16 hello : i32 n :
-    out n
+
+fnc i64 fact : i64 n :
+   // Base case
+   if n <= 1
+       out 1
+   end
+
+   dec ch i64 prev 1
+   add n 1
+   loop i 2 ..n
+       mul prev i
+   end
+   out prev
 end
 
-fnc empty test : i32 n :
-    out 1
+fnc i64 evnodd : i64 n :
+   mod n 2
+   if n == 0
+       out true
+   end
+   else
+       out false
+   end
 end

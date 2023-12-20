@@ -3,12 +3,13 @@ from MapleTypes import *
 import MapleParser
 
 class MapleTranspiler:
-    def __init__(self, ast):
+    def __init__(self, ast, is_library=False):
         self.ast = ast
         self.cpp_code = ""
         self.namesapce = ""
+        self.is_library = is_library
 
-    def transpile(self, is_library=False):
+    def transpile(self):
 
         # Write includes and start of main function
         self.cpp_code += "#include <iostream>\n#include <string>\n#include <vector>\n#include <fstream>\n#include <sstream>\n#include <algorithm>\n#include <random>\n#include <chrono>\n#include <map>\n#include <cstdint>\n\n"
@@ -32,7 +33,7 @@ class MapleTranspiler:
         self.cpp_code += "}\n" # End of namespace
 
         # Main function transpilation
-        if is_library == False: # If we are transpiling a library we don't need a main function
+        if self.is_library == False: # If we are transpiling a library we don't need a main function
             self.cpp_code += "int main() {\n" 
             self.cpp_code += "std::map<std::string, int8_t> backups;\n"
 
@@ -44,7 +45,7 @@ class MapleTranspiler:
         if self.ast[0].type == "RUN":
             self.cpp_code += "}\n" # End of run function
 
-        if is_library == False: # If we are transpiling a library we don't need a main function
+        if self.is_library == False: # If we are transpiling a library we don't need a main function
             self.cpp_code += "\nstd::cin.get();\nreturn 0;\n}\n" # End of main function
         return self.cpp_code
 
@@ -57,6 +58,10 @@ class MapleTranspiler:
             self.transpile_OUTnode(node)
         elif node.type == "IF":
             self.transpile_IFnode(node)
+        elif node.type == "ELSE":
+            self.transpile_ELSEnode(node)
+        elif node.type == "ELIF":
+            self.transpile_ELIFnode(node)
         elif node.type == "END":
             self.transpile_ENDnode(node)
         elif node.type == "SET":
@@ -87,10 +92,10 @@ class MapleTranspiler:
             raise Exception(f"Invalid node type: {node.type}")
    
     def transpile_LIBACCESSnode(self, node):
-        self.cpp_code = f"{node.library_name}::{node.function_name}" + "("
+        self.cpp_code += f"{node.library_name}::{node.function_name}" + "("
         for argument in node.args:
             self.cpp_code += f"{argument}, "
-        self.cpp_code = self.cpp_code[:-2] + ");\n" # Remove the last comma and space and add the closing bracket
+        self.cpp_code = self.cpp_code[:-2] + ");\n" # Remove the last comma and space and add the closing bracket 
 
     def transpile_INITnode(self, node):
         self.cpp_code += "namespace " + node.namespace_name + " {\n"
@@ -132,6 +137,16 @@ class MapleTranspiler:
 
     def transpile_IFnode(self, node):
         self.cpp_code += f"if ({node.condition.left} {node.condition.operator} {node.condition.right}) {{\n"
+        for child in node.children:
+            self.transpile_node(child)
+
+    def transpile_ELSEnode(self, node):
+        self.cpp_code += "else {\n"
+        for child in node.children:
+            self.transpile_node(child)
+
+    def transpile_ELIFnode(self, node):
+        self.cpp_code += "else if ({node.condition.left} {node.condition.operator} {node.condition.right}) {{\n"
         for child in node.children:
             self.transpile_node(child)
 

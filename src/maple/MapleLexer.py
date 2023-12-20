@@ -42,6 +42,8 @@ class MapleLexer:
             ("FALSE", r"\bfalse\b"), # False keyword
             ("OUT", r"\bout\b"), # Output keyword
             ("IF", r"\bif\b"), # If keyword            ("END", r"\bend\b"), # End keyword (end of if statement)
+            ("ELSE", r"\belse\b"), # Else keyword
+            ("ELIF", r"\belif\b"), # Elif keyword
             ("END", r"\bend\b"), # End keyword (end of if statement)
             ("LOOP", r"\bloop\b"), # Loop keyword (for loops)
             ("ROLL", r"\broll\b"), # Roll keyword (end of for loop)
@@ -50,13 +52,18 @@ class MapleLexer:
             ("LIB", r"\blib @\w+"), # Library keyword (import libraries)
             ("LIBACCESS", r"@(\w+)::"), # Library access keyword (access library namespace)
             ("INIT", r"\binit @\w+"), # Init keyword (initialize library namespace)
+            ("RANGE", r"([A-Za-z0-9_]+|\d+(\.\d*)?)\.\.([A-Za-z0-9_]+|\d+(\.\d*)?)"), # Range expression
             ("ADD", r"\badd\b"), # Add keyword (add to variable)
             ("SUB", r"\bsub\b"), # Subtract keyword (subtract from variable)
             ("MUL", r"\bmul\b"), # Multiply keyword (multiply variable)
             ("DIV", r"\bdiv\b"), # Divide keyword (divide variable)
             ("MOD", r"\bmod\b"), # Modulo keyword (modulo variable)
             ("FUNC", r"\bfnc\b"), # Function keyword
-            ("RETURN", r"\breturn\b"), # Return keyword
+            ("RETURN", r"\brtn\b"), # Return keyword
+            ("GREATER_EQUAL", r">="), # Greater than or equal to operator
+            ("LESS_EQUAL", r"<="), # Less than or equal to operator
+            ("NOT_EQUAL", r"!="), # Not equal operator
+            ("EQUAL", r"=="), # Equal operator
             ("GREATER", r">"), # Greater than operator
             ("LESS", r"<"), # Less than operator
             ("ARROW", r"->"), # Array assign operator

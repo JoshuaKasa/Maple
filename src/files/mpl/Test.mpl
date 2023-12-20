@@ -14,4 +14,4 @@ fnc empty fibonacci : i32 n :
     end
 end
 
-fibonacci : 11 :
+@sugar::evnodd : 11 :

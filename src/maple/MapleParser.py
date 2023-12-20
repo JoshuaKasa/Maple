@@ -68,6 +68,23 @@ class IFnode(ASTnode):
     def __repr__(self):
         return f"IFnode(condition={self.condition})"
 
+class ELIFnode(ASTnode):
+    def __init__(self, condition):
+        super().__init__('ELIF')
+        self.condition = condition
+        self.children = []
+
+    def __repr__(self):
+        return f"ELIFnode(condition={self.condition})"
+
+class ELSEnode(ASTnode):
+    def __init__(self):
+        super().__init__('ELSE')
+        self.children = []
+
+    def __repr__(self):
+        return f"ELSEnode()"
+
 class CONDITIONnode(ASTnode):
     def __init__(self, left, operator, right):
         super().__init__('CONDITION')
@@ -228,6 +245,10 @@ class MapleParser:
             self.parse_out()
         elif token.type == "IF":
             self.parse_if()
+        elif token.type == "ELIF":
+            self.parse_elif()
+        elif token.type == "ELSE":
+            self.parse_else()
         elif token.type == "END":
             self.parse_end()
         elif token.type == "SET":
@@ -258,14 +279,28 @@ class MapleParser:
             self.current_position += 1
    
     def parse_libaccess(self):
-        # Formatting is: @library_name::function_name : arg1, arg2 ... argn : (r"@(\w+)::")
-        library_name = self.tokens[self.current_position].value.split("@")[1].split("::")[0]
-        
-        # Parsing function call
-        self.parse_call() # This will append the call node to self.nodes
+        token_value = self.tokens[self.current_position].value
+        library_name, _ = token_value.split("@")[1].split("::")
+        self.current_position += 1  # Move past LIBACCESS token
 
-        access_node = LIBACCESSnode(library_name, self.nodes[-1].function_name, self.nodes[-1].args)
-        self.nodes.pop() # Removing the call node
+        if self.current_position >= len(self.tokens) or self.tokens[self.current_position].type != "ID":
+            raise MapleError("Expected function name after library access", self.tokens[self.current_position].line_num)
+
+        function_name = self.tokens[self.current_position].value
+        self.current_position += 1  # Move past function name
+
+        # Parsing the arguments like a regular function call
+        args = []
+        if self.current_position < len(self.tokens) and self.tokens[self.current_position].type == "COLON":
+            self.current_position += 1  # Move past the colon
+            while self.current_position < len(self.tokens) and self.tokens[self.current_position].type != "COLON":
+                arg = self.tokens[self.current_position].value
+                args.append(arg)
+                self.current_position += 1
+                if self.current_position < len(self.tokens) and self.tokens[self.current_position].type == "COMMA":
+                    self.current_position += 1  # Skip comma
+
+        access_node = LIBACCESSnode(library_name, function_name, args)
         self.nodes.append(access_node)
        
     def parse_init(self):
@@ -294,12 +329,11 @@ class MapleParser:
             code = f.read()
         tokens = MapleLexer(code).tokenize()
         nodes = MapleParser(tokens).parse()
-        cpp_code = MapleTranspiler(nodes).transpile()
+        cpp_code = MapleTranspiler(nodes, True).transpile()
 
-        # Writing the C++ code to a header file
-        with open(f"{library_name}.hpp", "w") as f:
+        # Writing the C++ code to a header file in the lib folder
+        with open(f"lib/{library_name}.hpp", "w") as f:
             f.write(cpp_code)
-            print(f"Absolute path: {os.path.abspath(f.name)}")
 
         # Adding the library to the symbol table
         self.symbol_table[library_name] = f"{library_name}.hpp"
@@ -384,6 +418,7 @@ class MapleParser:
             "SUB": "-",
             "MUL": "*",
             "DIV": "/",
+            "MOD": "%",
         }
         
         operation = self.tokens[self.current_position].type # Get the operation
@@ -460,13 +495,6 @@ class MapleParser:
                     line_num = self.tokens[self.current_position].line_num
                     current_char = self.tokens[self.current_position].char_pos
                     raise MapleError(f"Cannot set variable '{target}' of type '{self.symbol_table[target]['type']}' to variable '{value}' of type '{self.symbol_table[value]['type']}'", line_num, current_char)
-            else:
-                # Checking if the value is a number
-                if not value.isnumeric():
-                    line_num = self.tokens[self.current_position].line_num
-                    current_char = self.tokens[self.current_position].char_pos
-                    raise MapleError(f"Cannot set variable '{target}' of type '{self.symbol_table[target]['type']}' to '{value}' of type 'NUMBER'", line_num, current_char)
-
 
         set_node = SETnode(target, value, target_is_array, target_index)
         self.nodes.append(set_node) # Add the node to the AST
@@ -492,7 +520,8 @@ class MapleParser:
         self.current_position += 1
         left = self.tokens[self.current_position].value
         self.current_position += 1
-        operator = self.tokens[self.current_position].value
+        operator = self.tokens[self.current_position].value # Get the operator
+        print(operator)
         self.current_position += 1
         right = self.tokens[self.current_position].value
         self.current_position += 1
@@ -514,6 +543,54 @@ class MapleParser:
         self.nodes.append(if_node)
 
         # Parsing the END token 
+        self.parse_end()
+
+    def parse_else(self):
+        self.current_position += 1 # Move past 'ELSE'
+
+        # Temporarily store the current list of nodes
+        else_node = ELSEnode()
+        current_nodes = self.nodes
+        self.nodes = []
+
+        # Parse the code inside the else statement
+        while self.current_position < len(self.tokens) and self.tokens[self.current_position].type != "END":
+            self.parse_statement()
+
+        # Add the parsed nodes to the else_node and restore the original nodes list
+        else_node.children = self.nodes # Add the parsed nodes to the else_node
+        self.nodes = current_nodes # Restore the original nodes list
+        self.nodes.append(else_node) # Add the else_node to the AST
+
+        # Parsing the END token
+        self.parse_end()
+
+    def parse_elif(self):
+        self.current_position += 1 # Move past 'ELIF'
+        left = self.tokens[self.current_position].value # Get the left side of the condition
+        self.current_position += 1 # Move past left side of condition
+        operator = self.tokens[self.current_position].value # Get the operator
+        self.current_position += 1 # Move past operator
+        right = self.tokens[self.current_position].value # Get the right side of the condition
+        self.current_position += 1 # Move past right side of condition
+
+        condition_node = CONDITIONnode(left, operator, right)
+        elif_node = ELIFnode(condition_node)
+
+        # Temporarily store the current list of nodes
+        current_nodes = self.nodes
+        self.nodes = []
+
+        # Parse the code inside the elif statement
+        while self.current_position < len(self.tokens) and self.tokens[self.current_position].type != "END":
+            self.parse_statement()
+
+        # Add the parsed nodes to the elif_node and restore the original nodes list
+        elif_node.children = self.nodes
+        self.nodes = current_nodes
+        self.nodes.append(elif_node)
+
+        # Parsing the END token
         self.parse_end()
 
     def parse_end(self):
